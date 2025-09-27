@@ -1,0 +1,59 @@
+{
+  "chains": {
+    "11155111": {
+      "name": "sepolia",
+      "chainId": 11155111,
+      "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+      "blockExplorer": "https://sepolia.etherscan.io",
+      "nativeCurrency": {
+        "name": "Sepolia Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "contracts": {
+        "factory": "",
+        "escrowSrcImpl": "",
+        "escrowDstImpl": ""
+      },
+      "tokens": {
+        "ETH": {
+          "address": "0x0000000000000000000000000000000000000000",
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "decimals": 18,
+          "logoURI": "https://assets.coingecko.com/coins/images/279/small/ethereum.png"
+        }
+      }
+    },
+    "84532": {
+      "name": "base-sepolia",
+      "chainId": 84532,
+      "rpcUrl": "https://sepolia.base.org",
+      "blockExplorer": "https://sepolia-explorer.base.org",
+      "nativeCurrency": {
+        "name": "Base Sepolia Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "contracts": {
+        "factory": "",
+        "escrowSrcImpl": "",
+        "escrowDstImpl": ""
+      },
+      "tokens": {
+        "ETH": {
+          "address": "0x0000000000000000000000000000000000000000",
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "decimals": 18,
+          "logoURI": "https://assets.coingecko.com/coins/images/279/small/ethereum.png"
+        }
+      }
+    }
+  },
+  "relayer": "",
+  "feeCollector": "",
+  "rescueDelay": 86400,
+  "accessToken": "0x0000000000000000000000000000000000000000",
+  "platformFee": 100
+}
