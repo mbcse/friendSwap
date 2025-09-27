@@ -15,22 +15,24 @@ contract DeployScript is Script {
         address feeCollector = vm.envAddress("FEE_COLLECTOR");
         uint32 rescueDelay = uint32(vm.envUint("RESCUE_DELAY"));
         address accessToken = vm.envAddress("ACCESS_TOKEN");
+        address relayer = vm.envAddress("RELAYER");
         
         vm.startBroadcast(deployerPrivateKey);
-        
-        // Deploy implementation contracts
+
+        // Deploy implementation contracts (factory will be set during clone initialization)
         EscrowSrc escrowSrcImpl = new EscrowSrc(rescueDelay, IERC20(accessToken));
         EscrowDst escrowDstImpl = new EscrowDst(rescueDelay, IERC20(accessToken));
-        
-        // Deploy factory
+
+        // Deploy the real factory with implementation addresses
         EscrowFactory factory = new EscrowFactory(
             address(escrowSrcImpl),
             address(escrowDstImpl),
             rescueDelay,
             IERC20(accessToken),
-            feeCollector
+            feeCollector,
+            relayer
         );
-        
+
         vm.stopBroadcast();
         
         console.log("=== friendSwap Deployment Complete ===");
@@ -38,6 +40,7 @@ contract DeployScript is Script {
         console.log("EscrowDst Implementation:", address(escrowDstImpl));
         console.log("EscrowFactory:", address(factory));
         console.log("Fee Collector:", feeCollector);
+        console.log("Relayer:", relayer);
         console.log("Rescue Delay:", rescueDelay);
         console.log("Access Token:", accessToken);
         console.log("Platform Fee:", factory.platformFee());

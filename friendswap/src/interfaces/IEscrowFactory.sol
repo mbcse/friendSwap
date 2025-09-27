@@ -22,4 +22,6 @@ interface IEscrowFactory {
     function addressOfEscrowSrc(IBaseEscrow.ExecutionData calldata executionData) external view returns (address);
 
     function addressOfEscrowDst(IBaseEscrow.ExecutionData calldata executionData) external view returns (address);
+
+    function setFulfiller(address srcEscrowAddress, address fulfillerAddress) external;
 }

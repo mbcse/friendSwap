@@ -20,6 +20,7 @@ contract FriendSwapTest is Test {
     address public feeCollector = address(0x3);
     address public srcToken = address(0x4);
     address public dstToken = address(0x5);
+    address public relayer = address(0x6);
     
     uint256 public constant ASKER_AMOUNT = 1000e18;
     uint256 public constant FULLFILLER_AMOUNT = 1000e18;
@@ -39,7 +40,8 @@ contract FriendSwapTest is Test {
             address(escrowDstImpl),
             RESCUE_DELAY,
             IERC20(address(0)),
-            feeCollector
+            feeCollector,
+            relayer
         );
         
         // Create execution data

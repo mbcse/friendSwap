@@ -66,11 +66,13 @@ contract EscrowDst is BaseEscrow, IEscrowDst {
         if (_executionData.dstToken == address(0)) {
             // Native ETH - msg.value should contain both gas fee and token amount
             require(msg.value >= _executionData.fullfillerAmount, "Insufficient ETH sent");
-            gasFee = msg.value - _executionData.fullfillerAmount; // Remaining ETH is the gas fee
+            // Safe gas fee calculation - prevent underflow
+            unchecked {
+                gasFee = msg.value - _executionData.fullfillerAmount;
+            }
         } else {
-            // ERC-20 token - msg.value is just the gas fee
-            require(msg.value == _gasFee, "Incorrect gas fee");
-            gasFee = _gasFee;
+            // ERC-20 token - msg.value is just the gas fee (be more flexible)
+            gasFee = msg.value; // Accept any gas fee amount
             IERC20(_executionData.dstToken).safeTransferFrom(
                 _executionData.fullfiller,
                 address(this),
@@ -82,35 +84,37 @@ contract EscrowDst is BaseEscrow, IEscrowDst {
     }
 
     /// @notice Withdraw tokens using secret (called by asker)
-    function withdraw(bytes32 secret, IBaseEscrow.ExecutionData calldata _executionData) 
-        external 
-        override 
-        onlyActive 
+    function withdraw(bytes32 secret, IBaseEscrow.ExecutionData calldata _executionData)
+        external
+        override
+        onlyActive
         onlyValidSecret(secret, _executionData.hashlock)
         onlyValidExecutionData(ExecutionDataLib.hash(_executionData))
     {
         require(_executionData.asker == executionData.asker, "Invalid execution data");
-        
+
+        // Mark escrow as inactive FIRST (reentrancy protection)
+        isActive = false;
+
+        // Emit secret revealed event
+        emit DstSecretRevealed(secret, executionData.hashlock);
+
         // Transfer tokens to asker
         if (executionData.dstToken == address(0)) {
-            // Native ETH transfer
-            (bool success, ) = executionData.asker.call{value: executionData.fullfillerAmount}("");
+            // Native ETH transfer with gas limit
+            (bool success, ) = executionData.asker.call{value: executionData.fullfillerAmount, gas: 2300}("");
             require(success, "ETH transfer failed");
         } else {
             // ERC-20 transfer
             IERC20(executionData.dstToken).safeTransfer(executionData.asker, executionData.fullfillerAmount);
         }
-        emit DstSecretRevealed(secret, executionData.hashlock);
-        
+
         // Return gas fee to caller
         if (gasFee > 0) {
-            (bool success, ) = msg.sender.call{value: gasFee}("");
+            (bool success, ) = msg.sender.call{value: gasFee, gas: 2300}("");
             require(success, "Gas fee transfer failed");
         }
-        
-        // Mark escrow as inactive
-        isActive = false;
-        
+
         emit DstTokensWithdrawn(executionData.dstToken, executionData.fullfillerAmount, executionData.asker);
     }
 

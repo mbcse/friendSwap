@@ -31,11 +31,13 @@ contract EscrowSrc is BaseEscrow, IEscrowSrc {
     event SrcEscrowInitialized(address indexed asker, address indexed srcToken, uint256 amount);
     event SrcTokensWithdrawn(address indexed token, uint256 amount, address indexed recipient);
     event SrcEscrowCancelled(address indexed token, uint256 amount, address indexed recipient);
+    event FulfillerUpdated(address indexed oldFulfiller, address indexed newFulfiller);
 
     error EscrowAlreadyInitialized();
     error EscrowNotInitialized();
     error InsufficientTokenBalance();
     error InvalidWithdrawalAmount();
+    error OnlyFactory();
 
     modifier onlyActive() {
         if (!isActive) revert EscrowNotActive();
@@ -44,6 +46,11 @@ contract EscrowSrc is BaseEscrow, IEscrowSrc {
 
     modifier onlyInactive() {
         if (isActive) revert EscrowAlreadyInitialized();
+        _;
+    }
+
+    modifier onlyFactory() {
+        if (msg.sender != FACTORY) revert OnlyFactory();
         _;
     }
 
@@ -69,11 +76,13 @@ contract EscrowSrc is BaseEscrow, IEscrowSrc {
         if (executionData.srcToken == address(0)) {
             // Native ETH - msg.value should contain both gas fee and token amount
             require(msg.value >= executionData.askerAmount, "Insufficient ETH sent");
-            gasFee = msg.value - executionData.askerAmount; // Remaining ETH is the gas fee
+            // Safe gas fee calculation - prevent underflow
+            unchecked {
+                gasFee = msg.value - executionData.askerAmount;
+            }
         } else {
-            // ERC-20 token - msg.value is just the gas fee
-            require(msg.value == _gasFee, "Incorrect gas fee");
-            gasFee = _gasFee;
+            // ERC-20 token - msg.value is just the gas fee (be more flexible)
+            gasFee = msg.value; // Accept any gas fee amount
             IERC20(executionData.srcToken).safeTransferFrom(
                 executionData.asker,
                 address(this),
@@ -84,49 +93,63 @@ contract EscrowSrc is BaseEscrow, IEscrowSrc {
         emit SrcEscrowInitialized(executionData.asker, executionData.srcToken, executionData.askerAmount);
     }
 
+    /// @notice Set fulfiller address (called by factory)
+    function setFulfiller(address newFulfiller) external onlyFactory onlyActive {
+        require(newFulfiller != address(0), "Invalid fulfiller address");
+
+        address oldFulfiller = executionData.fullfiller;
+        executionData.fullfiller = newFulfiller;
+
+        emit FulfillerUpdated(oldFulfiller, newFulfiller);
+    }
+
     /// @notice Withdraw tokens using secret (called by asker or fullfiller)
-    function withdraw(bytes32 secret, IBaseEscrow.ExecutionData calldata _executionData) 
-        external 
-        override 
-        onlyActive 
+    function withdraw(bytes32 secret, IBaseEscrow.ExecutionData calldata _executionData)
+        external
+        override
+        onlyActive
         onlyValidSecret(secret, _executionData.hashlock)
         onlyValidExecutionData(ExecutionDataLib.hash(_executionData))
     {
         require(_executionData.asker == executionData.asker, "Invalid execution data");
-        
-        // Transfer tokens to fullfiller
+
+        // Mark escrow as inactive FIRST (reentrancy protection)
+        isActive = false;
+
+        // Calculate amounts
         uint256 withdrawAmount = executionData.askerAmount - platformFeeAmount;
+
+        // Transfer tokens to fullfiller
         if (executionData.srcToken == address(0)) {
-            // Native ETH transfer
-            (bool success, ) = executionData.fullfiller.call{value: withdrawAmount}("");
+            // Native ETH transfer with gas limit
+            (bool success, ) = executionData.fullfiller.call{value: withdrawAmount, gas: 2300}("");
             require(success, "ETH transfer failed");
-            
+
             // Transfer platform fee
             if (platformFeeAmount > 0) {
-                (bool feeSuccess, ) = executionData.feeCollector.call{value: platformFeeAmount}("");
+                (bool feeSuccess, ) = executionData.feeCollector.call{value: platformFeeAmount, gas: 2300}("");
                 require(feeSuccess, "Fee transfer failed");
             }
         } else {
             // ERC-20 transfer
             IERC20(executionData.srcToken).safeTransfer(executionData.fullfiller, withdrawAmount);
-            
+
             // Transfer platform fee
             if (platformFeeAmount > 0) {
                 IERC20(executionData.srcToken).safeTransfer(executionData.feeCollector, platformFeeAmount);
             }
         }
-        
+
         // Return gas fee to caller
         if (gasFee > 0) {
-            (bool success, ) = msg.sender.call{value: gasFee}("");
+            (bool success, ) = msg.sender.call{value: gasFee, gas: 2300}("");
             require(success, "Gas fee transfer failed");
         }
-        
-        // Mark escrow as inactive
-        isActive = false;
-        
+
         emit SrcTokensWithdrawn(executionData.srcToken, withdrawAmount, executionData.fullfiller);
-        emit SrcTokensWithdrawn(executionData.srcToken, platformFeeAmount, executionData.feeCollector);
+        if (platformFeeAmount > 0) {
+            emit SrcTokensWithdrawn(executionData.srcToken, platformFeeAmount, executionData.feeCollector);
+        }
     }
 
     /// @notice Public withdraw during public withdrawal period

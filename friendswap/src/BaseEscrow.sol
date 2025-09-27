@@ -85,9 +85,10 @@ abstract contract BaseEscrow is IBaseEscrow {
 
     /**
      * @dev Transfers native tokens to the recipient.
+     * @dev Uses limited gas to prevent griefing attacks
      */
     function _ethTransfer(address to, uint256 amount) internal {
-        (bool success,) = to.call{ value: amount }("");
+        (bool success,) = to.call{ value: amount, gas: 2300 }("");
         if (!success) revert NativeTokenSendingFailure();
     }
 

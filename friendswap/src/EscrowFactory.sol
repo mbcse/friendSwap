@@ -40,17 +40,29 @@ contract EscrowFactory is IEscrowFactory {
     /// @notice Access token for public functions
     IERC20 public immutable accessToken;
 
+    /// @notice Relayer address that can set fulfiller
+    address public relayer;
+
     event PlatformFeeUpdated(uint256 oldFee, uint256 newFee);
     event FeeCollectorUpdated(address oldCollector, address newCollector);
     event PlatformFeeCollected(address indexed token, uint256 amount, address indexed collector);
+    event RelayerUpdated(address oldRelayer, address newRelayer);
+    event FulfillerSet(address indexed srcEscrowAddress, address indexed fulfiller);
 
     error InvalidFee();
     error InvalidFeeCollector();
     error InsufficientGasFee();
     error InvalidExecutionData();
+    error InvalidRelayer();
+    error OnlyRelayer();
 
     modifier onlyOwner() {
         require(msg.sender == feeCollector, "Only fee collector can call this");
+        _;
+    }
+
+    modifier onlyRelayer() {
+        if (msg.sender != relayer) revert OnlyRelayer();
         _;
     }
 
@@ -59,17 +71,20 @@ contract EscrowFactory is IEscrowFactory {
         address _escrowDstImpl,
         uint32 _rescueDelay,
         IERC20 _accessToken,
-        address _feeCollector
+        address _feeCollector,
+        address _relayer
     ) {
         require(_escrowSrcImpl != address(0), "Invalid escrow src impl");
         require(_escrowDstImpl != address(0), "Invalid escrow dst impl");
         require(_feeCollector != address(0), "Invalid fee collector");
-        
+        require(_relayer != address(0), "Invalid relayer");
+
         escrowSrcImpl = _escrowSrcImpl;
         escrowDstImpl = _escrowDstImpl;
         rescueDelay = _rescueDelay;
         accessToken = _accessToken;
         feeCollector = _feeCollector;
+        relayer = _relayer;
         platformFee = DEFAULT_PLATFORM_FEE;
     }
 
@@ -89,6 +104,14 @@ contract EscrowFactory is IEscrowFactory {
         emit FeeCollectorUpdated(oldCollector, newCollector);
     }
 
+    /// @notice Update relayer address
+    function setRelayer(address newRelayer) external onlyOwner {
+        if (newRelayer == address(0)) revert InvalidRelayer();
+        address oldRelayer = relayer;
+        relayer = newRelayer;
+        emit RelayerUpdated(oldRelayer, newRelayer);
+    }
+
     /// @notice Create source escrow (called by asker)
     function createSrcEscrow(IBaseEscrow.ExecutionData calldata executionData)
         external
@@ -98,7 +121,17 @@ contract EscrowFactory is IEscrowFactory {
         if (executionData.asker == address(0)) {
             revert InvalidExecutionData();
         }
-        
+        if (executionData.askerAmount == 0) {
+            revert InvalidExecutionData();
+        }
+        if (executionData.platformFee > MAX_PLATFORM_FEE) {
+            revert InvalidFee();
+        }
+        // For native ETH (srcToken == address(0)), ensure sufficient ETH sent
+        if (executionData.srcToken == address(0) && msg.value < executionData.askerAmount) {
+            revert InvalidExecutionData();
+        }
+
         // Only the asker can create their source escrow
         require(msg.sender == executionData.asker, "Only asker can create source escrow");
         
@@ -117,12 +150,19 @@ contract EscrowFactory is IEscrowFactory {
     }
 
     /// @notice Create destination escrow (called by fulfiller)
-    function createDstEscrow(IBaseEscrow.ExecutionData calldata executionData) 
-        external 
-        payable 
+    function createDstEscrow(IBaseEscrow.ExecutionData calldata executionData)
+        external
+        payable
     {
         // Validate execution data
         if (executionData.asker == address(0) || executionData.fullfiller == address(0)) {
+            revert InvalidExecutionData();
+        }
+        if (executionData.fullfillerAmount == 0) {
+            revert InvalidExecutionData();
+        }
+        // For native ETH (dstToken == address(0)), ensure sufficient ETH sent
+        if (executionData.dstToken == address(0) && msg.value < executionData.fullfillerAmount) {
             revert InvalidExecutionData();
         }
         
@@ -156,13 +196,27 @@ contract EscrowFactory is IEscrowFactory {
     }
 
     /// @notice Get the address of destination escrow
-    function addressOfEscrowDst(IBaseEscrow.ExecutionData calldata executionData) 
-        external 
-        view 
-        returns (address) 
+    function addressOfEscrowDst(IBaseEscrow.ExecutionData calldata executionData)
+        external
+        view
+        returns (address)
     {
         bytes32 salt = keccak256(abi.encode(executionData));
         return Clones.predictDeterministicAddress(escrowDstImpl, salt, address(this));
+    }
+
+    /// @notice Set fulfiller address on source escrow (called by relayer)
+    function setFulfiller(address srcEscrowAddress, address fulfillerAddress)
+        external
+        onlyRelayer
+    {
+        require(srcEscrowAddress != address(0), "Invalid src escrow address");
+        require(fulfillerAddress != address(0), "Invalid fulfiller address");
+
+        // Call setFulfiller on the source escrow contract
+        IEscrowSrc(srcEscrowAddress).setFulfiller(fulfillerAddress);
+
+        emit FulfillerSet(srcEscrowAddress, fulfillerAddress);
     }
 
     /// @notice Collect platform fees

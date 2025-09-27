@@ -447,17 +447,17 @@ app.listen(port, () => {
   console.log(`📊 API endpoints: /swaps (GET/POST), /frames`);
 });
 
-// Start relayer with deployed addresses (fill from deployment output)
+// Start relayer with deployed addresses (updated with factory init fix)
 startRelayer({
   sepolia: {
-    EscrowSrc: "0x872f658626C1cD14B6A4Aca27d9187741C222ef7",
-    EscrowDst: "0xC6Accd60207CF313FaC86cAf90abb3Bd26413c7d",
-    Factory: "0xDC9110e9E4A530a28e97933a3D2b381B2dEc7596",
+    EscrowSrc: "0xD6DbCd55483148E78AACf4A47F0268dB669CA4aB",
+    EscrowDst: "0xCb8f25eF88b140aF06B17F6628277c8e9C447afA",
+    Factory: "0x14309fAFD9cf2c94d27bC32DD55Be0323175916B",
   },
   baseSepolia: {
-    EscrowSrc: "0x9f6bEffC14AA833341179cF84C179C025CFfF85B",
-    EscrowDst: "0x35d7e047D6D46b302388220f93b9E5Cac2594F5a",
-    Factory: "0x67c08F4936AeE457B44CACcf2934F15473214f0e",
+    EscrowSrc: "0x56e4FaBf0eA447fB807427d36892bCC839b45f16",
+    EscrowDst: "0x4e9712029C8f255df758B9ecce81952AB088fC2C",
+    Factory: "0xe3A13A4356042508ef14B40f7F88839c976464B2",
   },
 });
 
